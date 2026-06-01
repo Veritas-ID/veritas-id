@@ -12,7 +12,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center px-4">
       <h1 className="text-4xl font-bold text-gray-900">Veritas ID</h1>
       <p className="text-lg text-gray-500 mt-2 mb-8">
-        Verify the data behind every chart
+        Trust travels with the data.
       </p>
       <QueryForm value={query} onChange={setQuery} />
       <ExampleQueries onSelect={(q) => setQuery(q)} />
