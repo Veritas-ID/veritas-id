@@ -9,12 +9,20 @@ export function NavBar() {
         <Link href="/" className="text-sm font-semibold text-gray-900 tracking-tight">
           Veritas ID
         </Link>
-        <a
-          href="/#verify"
-          className="text-sm text-gray-700 hover:text-gray-900 transition-colors"
-        >
-          Verify
-        </a>
+        <div className="flex items-center gap-6">
+          <Link
+            href="/docs"
+            className="text-sm text-gray-700 hover:text-gray-900 transition-colors"
+          >
+            Docs
+          </Link>
+          <a
+            href="/#verify"
+            className="text-sm text-gray-700 hover:text-gray-900 transition-colors"
+          >
+            Verify
+          </a>
+        </div>
       </div>
     </nav>
   );
