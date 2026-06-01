@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { QueryForm } from "@/components/QueryForm";
 import { ExampleQueries } from "@/components/ExampleQueries";
+import { VerifySection } from "@/components/VerifySection";
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -15,6 +16,8 @@ export default function Home() {
       </p>
       <QueryForm value={query} onChange={setQuery} />
       <ExampleQueries onSelect={(q) => setQuery(q)} />
+      <hr className="border-gray-200 w-full max-w-[800px] my-4" />
+      <VerifySection />
     </main>
   );
 }
