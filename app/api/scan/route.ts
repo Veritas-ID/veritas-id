@@ -4,13 +4,21 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 const VID_PATTERN = /VID-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+/i;
 
-const VISION_PROMPT = `This is a data verification chart. Extract the following and return only a valid JSON object, nothing else:
+const VISION_PROMPT = `This is a data verification chart. Your task is to extract the exact data values plotted on the line chart.
+
+Important rules:
+- The Y-axis may include negative values. Read the scale carefully — values below the zero line are negative.
+- Use the Y-axis gridlines and labels to determine the exact value at each data point dot.
+- Do not guess — anchor every reading to the nearest labelled gridline and interpolate carefully.
+- Values can be negative. If a data point is below the zero line, its value must be negative.
+
+Return only a valid JSON object, nothing else:
 {
   "veritas_id": "the Veritas ID starting with VID-",
-  "values": [array of all numerical Y-axis values plotted on the line in chronological order left to right]
+  "values": [array of all numerical Y-axis values at each data point, in chronological order left to right, rounded to one decimal place]
 }
-Example:
-{"veritas_id": "VID-KEN-UNEM-FC7919", "values": [7.2, 7.8, 9.1, 11.3, 13.4]}`;
+Example with negative values:
+{"veritas_id": "VID-KEN-UNEM-FC7919", "values": [2.6, -1.6, 0.8, 1.9, 2.2, -6.4, 1.1, 4.3, 3.3, 4.1]}`;
 
 interface ClaudeVisionResult {
   veritas_id: string;
@@ -24,18 +32,32 @@ interface Discrepancy {
   extracted: number;
 }
 
-const TOLERANCE = 1.0;
+type Confidence = "high" | "medium" | "low";
+
+const ABSOLUTE_TOLERANCE = 1.0;
+const PERCENTAGE_TOLERANCE = 0.15; // 15%
+const MIN_DISCREPANCIES_TO_FLAG = 2;
 
 function compareValues(
   stored: number[],
   extracted: number[],
   years: number[]
-): { tampered: boolean; discrepancies: Discrepancy[] } {
+): {
+  tampered: boolean;
+  discrepancies: Discrepancy[];
+  confidence: Confidence;
+  matched_values: number;
+  total_values: number;
+} {
   const discrepancies: Discrepancy[] = [];
   const len = Math.min(stored.length, extracted.length);
 
   for (let i = 0; i < len; i++) {
-    if (Math.abs(stored[i] - extracted[i]) > TOLERANCE) {
+    const diff = Math.abs(stored[i] - extracted[i]);
+    const percentDiff = stored[i] !== 0 ? diff / Math.abs(stored[i]) : diff;
+
+    // Flag if both absolute and percentage thresholds are exceeded
+    if (diff > ABSOLUTE_TOLERANCE && percentDiff > PERCENTAGE_TOLERANCE) {
       discrepancies.push({
         index: i,
         year: years[i] ?? i,
@@ -45,7 +67,21 @@ function compareValues(
     }
   }
 
-  return { tampered: discrepancies.length > 0, discrepancies };
+  // Require at least 2 discrepancies before flagging as tampered
+  const tampered = discrepancies.length >= MIN_DISCREPANCIES_TO_FLAG;
+  const matched_values = len - discrepancies.length;
+  const matchRate = len > 0 ? matched_values / len : 1;
+
+  let confidence: Confidence;
+  if (matchRate >= 0.9) {
+    confidence = "high";
+  } else if (matchRate >= 0.7) {
+    confidence = "medium";
+  } else {
+    confidence = "low";
+  }
+
+  return { tampered, discrepancies, confidence, matched_values, total_values: len };
 }
 
 export async function POST(request: Request) {
@@ -131,8 +167,9 @@ export async function POST(request: Request) {
     }
 
     // Compare extracted values against stored values
-    const { tampered, discrepancies } = compareValues(
-      data.values as number[],
+    const storedValues = data.values as number[];
+    const { tampered, discrepancies, confidence, matched_values, total_values } = compareValues(
+      storedValues,
       extractedValues,
       data.years as number[]
     );
@@ -141,6 +178,9 @@ export async function POST(request: Request) {
       success: true,
       id: extractedId,
       tampered,
+      confidence,
+      matched_values,
+      total_values,
       extracted_values: extractedValues,
       stored_values: data.values,
       discrepancies,
